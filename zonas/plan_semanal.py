@@ -165,12 +165,19 @@ def repartir(P, frecuencias, carga, n_dias=len(DIAS)):
 
     orden = sorted(range(k), key=lambda j: C[j][0])   # de occidente a oriente
     dia_de = {j: DIAS[i] for i, j in enumerate(orden)}
+    # Con menos puntos que días sobran días sin sector. Antes las visitas se
+    # topaban en k y un único punto F3 recibía UNA visita a la semana, en
+    # silencio. Las que no caben en un sector van a esos días libres.
+    libres = DIAS[k:n_dias]
     for i in range(n):
         f = frecuencias[i]
-        veces = min(max(1, int(round(f))) if f >= 1 else 1, k)
+        veces = min(max(1, int(round(f))) if f >= 1 else 1, n_dias)
         propio = int(lab[i])
-        for j in sorted(range(k), key=lambda x: (x != propio, d[i, x]))[:veces]:
+        cerca = sorted(range(k), key=lambda x: (x != propio, d[i, x]))[:veces]
+        for j in cerca:
             dias[dia_de[j]].append(i)
+        for dia in libres[:veces - len(cerca)]:
+            dias[dia].append(i)
     return dias
 
 

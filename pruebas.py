@@ -139,6 +139,22 @@ finally:
 revisar("una semana de seis días incluye el sábado", seis[-1] == "SA" and len(seis) == 6,
         " · ".join(seis))
 
+# Con menos puntos que días, un punto F3 recibía UNA visita: la frecuencia se
+# topaba en el número de sectores, que no puede pasar del número de puntos.
+def visitas_por_punto(frecs):
+    P2 = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])[:len(frecs)]
+    D2 = np.sqrt(((P2[:, None] - P2[None]) ** 2).sum(2)) * 10
+    filas2 = PS.plan_de_zona(P2, np.full(len(frecs), 30e6), np.array(frecs, float), D2, rapido=True)
+    cuenta = [sum(i in f["secuencia"] for f in filas2) for i in range(len(frecs))]
+    distintos = all(len(f["secuencia"]) == len(set(f["secuencia"])) for f in filas2)
+    return cuenta, distintos
+
+
+c1, ok1 = visitas_por_punto([3])
+c2, ok2 = visitas_por_punto([3, 2])
+revisar("una zona más chica que la semana respeta la frecuencia",
+        c1 == [3] and c2 == [3, 2] and ok1 and ok2, f"F3 → {c1} · F3,F2 → {c2}")
+
 
 def lanza(fn):
     try:
