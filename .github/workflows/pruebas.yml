@@ -1,0 +1,25 @@
+name: pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  invariantes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt ruff
+      - name: Análisis estático
+        run: ruff check .
+      - name: Invariantes del motor
+        run: python3 pruebas.py
+      - name: Cadena completa sobre datos sintéticos
+        run: |
+          python3 ejemplo/generar_datos.py
+          python3 ejemplo/demo.py

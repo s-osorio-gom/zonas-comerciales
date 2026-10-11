@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+.ipynb_checkpoints/
+
+# salidas del ejemplo: se regeneran con `python3 ejemplo/demo.py`
+ejemplo/salida/
+ejemplo/datos/*.csv
+.ruff_cache/
+.pytest_cache/

@@ -1,0 +1,6 @@
+# Análisis estático mínimo: errores reales (sintaxis, nombres, imports), no estilo.
+extend-exclude = [".venv", "venv"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E702"]   # el código agrupa asignaciones cortas con `;` a propósito

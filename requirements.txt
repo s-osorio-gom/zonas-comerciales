@@ -1,0 +1,6 @@
+numpy>=1.24,<3
+pandas>=2.0,<4
+scipy>=1.10,<2
+shapely>=2.0,<3
+folium>=0.15,<1
+ortools>=9.7,<10  # opcional: sin él, orden_optimo cae al heurístico sin romper nada
