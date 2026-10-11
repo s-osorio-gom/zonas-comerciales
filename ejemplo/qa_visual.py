@@ -5,7 +5,8 @@ qa_visual.py — el protocolo de QA visual de `docs/mapa.md`, automatizado.
 
     python3 ejemplo/qa_visual.py
 
-Abre el mapa en un navegador de verdad, espera a que la capa termine de pintar,
+Abre el mapa en un navegador de verdad —escritorio 1440×900 y teléfono
+390×844—, comprueba que nada tape el zoom, espera a que la capa termine de pintar,
 recoge los errores de JavaScript y guarda capturas. **Mirar las capturas** es el
 paso que no se puede automatizar: cifras que no coinciden entre panel y tooltip,
 etiquetas que tapan datos o estados mal marcados solo se ven así.
@@ -19,7 +20,18 @@ MAPA = SALIDA / "mapa_zonas.html"
 TEXTOS_PANEL = ("Zonas propuestas", "Lo que quedó fuera", "Cobertura de venta")
 
 
-def veredicto(capas: int, errores: list, panel: str) -> list:
+# Controles que nada debe tapar: el panel llegó a cubrir el zoom en escritorio y
+# casi todo el mapa en un teléfono, con la consola limpia.
+CONTROLES = (".leaflet-control-zoom-in", ".leaflet-control-zoom-out")
+TAPADOS_JS = """(sel) => sel.filter(s => {
+    const e = document.querySelector(s); if (!e) return true;
+    const r = e.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    return !e.contains(document.elementFromPoint(x, y));
+})"""
+
+
+def veredicto(capas: int, errores: list, panel: str, tapados=()) -> list:
     """Motivos por los que la captura NO se entrega. Vacío = pasa.
 
     Las peticiones fallidas no cuentan: sin red las teselas del fondo fallan y
@@ -34,6 +46,7 @@ def veredicto(capas: int, errores: list, panel: str) -> list:
     if "NaN" in panel:
         motivos.append("'NaN' en pantalla")
     motivos += [f"falta «{t}» en el panel" for t in TEXTOS_PANEL if t not in panel]
+    motivos += [f"control tapado: {s}" for s in tapados]
     return motivos
 
 
@@ -61,6 +74,7 @@ def main() -> int:
 
         capas = pg.evaluate("document.querySelectorAll('path.leaflet-interactive').length")
         panel = pg.inner_text("body")
+        tapados = pg.evaluate(TAPADOS_JS, list(CONTROLES))
         pg.screenshot(path=str(SALIDA / "qa_01_general.png"), full_page=False)
 
         # Acercar sobre una zona REAL. Un zoom sobre el centro del viewport cae
@@ -79,6 +93,19 @@ def main() -> int:
         pg.wait_for_timeout(3_000)
         pg.screenshot(path=str(SALIDA / "qa_02_zona.png"))
         print(f"  zoom sobre       {z}")
+
+        # Teléfono: el panel debe arrancar plegado y dejar ver el mapa.
+        mv = nav.new_page(viewport={"width": 390, "height": 844}, is_mobile=True,
+                          has_touch=True, device_scale_factor=2)
+        mv.on("pageerror", lambda e: errores.append(str(e)))
+        mv.goto(MAPA.as_uri())
+        mv.wait_for_selector(".leaflet-container", timeout=30_000)
+        mv.wait_for_timeout(3_000)
+        tapados += [f"{s} (móvil)" for s in mv.evaluate(TAPADOS_JS, list(CONTROLES))]
+        ancho = mv.evaluate("document.documentElement.scrollWidth")
+        if ancho > 390:
+            tapados.append(f"scroll horizontal en móvil ({ancho} px)")
+        mv.screenshot(path=str(SALIDA / "qa_03_movil.png"))
         nav.close()
 
     print(f"  formas dibujadas    {capas}")
@@ -91,8 +118,9 @@ def main() -> int:
     for texto in TEXTOS_PANEL:
         print(f"  panel «{texto}»  {'OK' if texto in panel else 'FALTA'}")
     print(f"  'NaN' en pantalla   {'SÍ ← defecto' if 'NaN' in panel else 'no'}")
+    print(f"  controles tapados   {len(tapados)}")
     print("  capturas en ejemplo/salida/qa_*.png — MIRARLAS")
-    motivos = veredicto(capas, errores, panel)
+    motivos = veredicto(capas, errores, panel, tapados)
     for m in motivos:
         print(f"  FALLA: {m}")
     return 1 if motivos else 0

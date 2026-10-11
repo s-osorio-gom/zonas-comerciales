@@ -198,6 +198,8 @@ revisar("el QA visual pasa un panel completo", QV.veredicto(10, [], panel_ok) ==
 revisar("el QA visual falla con NaN en pantalla", bool(QV.veredicto(10, [], panel_ok + " NaN")))
 revisar("el QA visual falla si al panel le falta un bloque",
         bool(QV.veredicto(10, [], "Zonas propuestas")))
+revisar("el QA visual falla si algo tapa el control de zoom",
+        bool(QV.veredicto(10, [], panel_ok, [".leaflet-control-zoom-in"])))
 
 print("\n" + "─" * 60)
 print(f"  {len(fallos)} fallos")

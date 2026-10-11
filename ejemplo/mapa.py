@@ -172,12 +172,22 @@ def _panel(resumen: dict, parametros: dict) -> str:
         return (f"<div style='margin-top:8px;color:#4b5563'>Punto = visitas/semana{p}</div>"
                 "<div style='color:#4b5563'>Borde a rayas = territorio del grupo</div>")
 
+    # El panel deja libre el control de zoom (arriba a la izquierda) y se pliega.
+    # En pantallas estrechas baja al pie y arranca plegado: abierto tapaba casi
+    # todo el mapa en un teléfono.
     return f"""
-    <div style="position:fixed;top:12px;left:12px;z-index:9999;width:288px;
-                background:#fff;border:1px solid #d7dbe0;border-radius:8px;
-                padding:12px 14px;font:12px/1.45 system-ui,-apple-system,sans-serif;
-                box-shadow:0 2px 10px rgba(0,0,0,.12);max-height:88vh;overflow:auto">
-      <div style="font-size:14px;font-weight:700">Zonas propuestas</div>
+    <style>
+      #panel-zonas {{position:fixed;top:12px;left:54px;z-index:9999;width:288px;
+        background:#fff;border:1px solid #d7dbe0;border-radius:8px;padding:10px 14px;
+        font:12px/1.45 system-ui,-apple-system,sans-serif;color:#111827;
+        box-shadow:0 2px 10px rgba(0,0,0,.12);max-height:calc(100vh - 60px);overflow:auto}}
+      #panel-zonas summary {{cursor:pointer;font-size:14px;font-weight:700}}
+      @media (max-width:600px) {{
+        #panel-zonas {{top:auto;bottom:26px;left:8px;right:8px;width:auto;max-height:50vh}}
+      }}
+    </style>
+    <details id="panel-zonas" open>
+      <summary>Zonas propuestas</summary>
       <div style="color:#6b7280;margin-bottom:10px">Datos sintéticos · ejemplo reproducible</div>
       <table style="width:100%">{"".join(fila(k, v) for k, v in resumen["capturado"].items())}</table>
       <div style="margin:10px 0 4px;font-weight:700;color:#b4453f">Lo que quedó fuera</div>
@@ -185,7 +195,11 @@ def _panel(resumen: dict, parametros: dict) -> str:
       <div style="margin:10px 0 4px;font-weight:700">Reglas con las que se calculó</div>
       <table style="width:100%;color:#4b5563">{"".join(fila(k, v) for k, v in parametros.items())}</table>
       {leyenda()}
-    </div>"""
+    </details>
+    <script>
+      if (window.matchMedia("(max-width:600px)").matches)
+        document.getElementById("panel-zonas").removeAttribute("open");
+    </script>"""
 
 
 def construir(pdv, zonas, resumen, parametros, salida,
