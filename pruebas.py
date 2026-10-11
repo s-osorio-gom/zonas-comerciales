@@ -118,12 +118,19 @@ peores = []
 for s in range(4):
     Pr = np.random.default_rng(s).uniform(0, 5, (14, 2))
     Dr = np.sqrt(((Pr[:, None] - Pr[None]) ** 2).sum(2))
-    o, largo = PS.orden_optimo(Dr, segundos=0.3)
+    o, largo = PS.orden_optimo(Dr)   # sin reloj: con 0,3 s fallaba bajo carga
     largo_real = sum(Dr[o[k], o[k + 1]] for k in range(len(o) - 1))
     if sorted(o) != list(range(14)) or abs(largo - largo_real) > 1e-6 or largo > PS.tour_rapido(Dr) + 1e-6:
         peores.append(s)
 revisar("el solver optimiza el camino abierto que se mide", not peores,
         f"semillas con problema: {peores}" if peores else "4 de 4 instancias")
+
+# Por defecto el solver para por número de soluciones, no por reloj: la misma
+# entrada debe dar la misma ruta aunque la máquina esté cargada.
+Pd = np.random.default_rng(11).uniform(0, 8, (25, 2))
+Dd = np.sqrt(((Pd[:, None] - Pd[None]) ** 2).sum(2))
+r1, r2 = PS.orden_optimo(Dd), PS.orden_optimo(Dd)
+revisar("el solver por defecto repite la misma ruta", r1 == r2, f"{r1[1]:.2f} vs {r2[1]:.2f}")
 
 revisar("el motor usa el mismo módulo de reglas que el usuario",
         Z.R is R and PS.R is R and qa.R is R)

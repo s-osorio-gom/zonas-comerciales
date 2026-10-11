@@ -37,6 +37,13 @@ except ImportError:        # módulo copiado suelto a otro proyecto
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import reglas as R
 
+# El solver para por NÚMERO DE SOLUCIONES, no por reloj: con límite de tiempo el
+# plan dependía de cuánta CPU le tocara (tres corridas de la misma base daban
+# rutas distintas). TOPE_SEGUNDOS solo es la red de seguridad: el peor día del
+# ejemplo (31 paradas) se resuelve en ~2 s.
+SOLUCIONES = 200
+TOPE_SEGUNDOS = 20
+
 DIAS = ["LU", "MA", "MI", "JU", "VI", "SA"][:R.DIAS_SEMANA]
 NOMBRE = {"LU": "Lunes", "MA": "Martes", "MI": "Miércoles",
           "JU": "Jueves", "VI": "Viernes", "SA": "Sábado"}
@@ -78,12 +85,15 @@ def orden_optimo(D, segundos=None):
 
     Si OR-Tools no está disponible, cae al heurístico sin romper nada.
 
-    El presupuesto se reparte por TAMAÑO DEL DÍA. La búsqueda local guiada no
-    para cuando encuentra el óptimo: agota el tiempo que se le dé. Como la
-    mediana de un día real son 8 paradas, un presupuesto plano de un segundo es
-    tiempo quemado. Medido sobre los 115 días de `ejemplo/`: presupuesto plano
-    de 1 s → 113,0 s y 9.864,2 min de ruta; presupuesto por tamaño → 33,3 s
-    y 9.848,0 min. **3,4x más rápido y la misma ruta** (0,2 % de ruido).
+    Por defecto (`segundos=None`) la búsqueda local guiada para tras SOLUCIONES
+    soluciones: el mismo día da siempre la misma ruta, en cualquier máquina y
+    con cualquier carga. Medido sobre los 115 días de `ejemplo/`: con límite de
+    reloj por tamaño del día, 32,7 s y 9.848–9.866 min según la corrida; con 200
+    soluciones, 25–31 s y 9.865,6 min en todas. Un presupuesto plano de 1 s
+    por día costaba 113 s por la misma ruta.
+
+    Con `segundos` explícito se vuelve al límite de reloj: más tiempo puede dar
+    rutas algo más cortas, a cambio de que el resultado dependa de la máquina.
     """
     n = len(D)
     if n <= 2:
@@ -92,8 +102,6 @@ def orden_optimo(D, segundos=None):
         from ortools.constraint_solver import routing_enums_pb2, pywrapcp
     except ImportError:
         return list(range(n)), tour_rapido(D)
-    ms = (int(segundos * 1000) if segundos is not None else
-          150 if n <= 10 else 600 if n <= 20 else 1500 if n <= 35 else 3000)
     # El día es un recorrido ABIERTO: empieza en una parada y termina en otra.
     # OR-Tools resuelve circuitos cerrados, así que se añade un depósito ficticio
     # (nodo n) a coste cero de todos: el circuito óptimo por él equivale al
@@ -109,7 +117,11 @@ def orden_optimo(D, segundos=None):
     par = pywrapcp.DefaultRoutingSearchParameters()
     par.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
     par.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    par.time_limit.FromMilliseconds(ms)
+    if segundos is None:
+        par.solution_limit = SOLUCIONES
+        par.time_limit.FromSeconds(TOPE_SEGUNDOS)
+    else:
+        par.time_limit.FromMilliseconds(int(segundos * 1000))
     sol = rut.SolveWithParameters(par)
     if not sol:
         return list(range(n)), tour_rapido(D)
@@ -220,9 +232,9 @@ def plan_de_zona(P, venta, frecuencias, D, rapido=False, segundos=None):
     de bucles de decisión, nunca para publicar.
 
     `segundos` es el presupuesto del solver por día. Dejarlo en `None`: el
-    presupuesto se ajusta solo al tamaño del día. Es el parámetro que domina el
-    tiempo total —el solver corre una vez por DÍA, no una vez por zona—, así que
-    subirlo a mano solo tiene sentido en zonas con días de muchas paradas.
+    solver para por número de soluciones y el plan es reproducible. Es el
+    parámetro que domina el tiempo total —el solver corre una vez por DÍA, no
+    una vez por zona—; fijarlo cambia a límite de reloj (ver `orden_optimo`).
 
     Devuelve lista de dicts por día.
     """
