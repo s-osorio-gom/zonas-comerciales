@@ -1,5 +1,7 @@
 # Zonas comerciales
 
+[![pruebas](https://github.com/s-osorio-gom/zonas-comerciales/actions/workflows/pruebas.yml/badge.svg)](https://github.com/s-osorio-gom/zonas-comerciales/actions/workflows/pruebas.yml)
+
 Convierte una base de puntos de venta georreferenciados en zonas que **se pagan**,
 **se pueden recorrer** y se ven en un mapa que alguien nuevo entiende sin que se
 lo expliquen.
