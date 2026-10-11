@@ -173,6 +173,12 @@ def lanza(fn):
 
 malo = base(30).assign(venta=lambda d: d.venta.where(d.index != 3))
 revisar("una venta nula se rechaza con ValueError", lanza(lambda: Z.zonificar_grupo(malo)))
+try:
+    Z.zonificar_grupo(base(30).assign(venta="abc"))
+    msg = ""
+except ValueError as e:
+    msg = str(e)
+revisar("una venta no numérica se rechaza nombrando la columna", "'venta'" in msg, msg)
 revisar("una columna faltante se rechaza con ValueError",
         lanza(lambda: Z.zonificar_grupo(base(30).drop(columns="frecuencia_semana"))))
 z0, inf0 = Z.zonificar_grupo(base(), asesores=0)

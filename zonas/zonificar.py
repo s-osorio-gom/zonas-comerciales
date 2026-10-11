@@ -271,7 +271,10 @@ def _validar(df, lat, lon, venta, frecuencia):
     if faltan:
         raise ValueError(f"faltan columnas: {', '.join(faltan)}")
     for c in (lat, lon, venta, frecuencia):
-        x = np.asarray(df[c], dtype=float)
+        try:
+            x = np.asarray(df[c], dtype=float)
+        except (TypeError, ValueError):
+            raise ValueError(f"'{c}' tiene valores no numéricos") from None
         malos = int((~np.isfinite(x)).sum())
         if malos:
             raise ValueError(f"'{c}' tiene {malos} valores nulos o no finitos")
