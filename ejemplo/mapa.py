@@ -182,8 +182,10 @@ def _panel(resumen: dict, parametros: dict) -> str:
         font:12px/1.45 system-ui,-apple-system,sans-serif;color:#111827;
         box-shadow:0 2px 10px rgba(0,0,0,.12);max-height:calc(100vh - 60px);overflow:auto}}
       #panel-zonas summary {{cursor:pointer;font-size:14px;font-weight:700}}
+      #panel-zonas summary::after {{content:" · ver resumen ▾";font-weight:400;color:#6b7280}}
+      #panel-zonas[open] summary::after {{content:" ▴"}}
       @media (max-width:600px) {{
-        #panel-zonas {{top:auto;bottom:26px;left:8px;right:8px;width:auto;max-height:50vh}}
+        #panel-zonas {{top:auto;bottom:56px;left:8px;right:8px;width:auto;max-height:50vh}}
       }}
     </style>
     <details id="panel-zonas" open>
