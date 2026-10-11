@@ -13,9 +13,9 @@ se cae el k-means de manual.
 
 ![Zonas propuestas, detalle urbano](docs/img/zonas-detalle.png)
 
-<sub>Salida del ejemplo incluido, sobre datos sintéticos. Cada zona es su celda de
-Voronoi recortada al área que sus propios puntos alcanzan: no se solapan, y
-ninguna zona vecina repite color.</sub>
+<sub>Salida del ejemplo incluido, sobre datos sintéticos. Cada zona es la unión de
+las celdas de Voronoi de sus puntos, recortada al área que esos puntos alcanzan:
+no se solapan, cada punto cae dentro de la suya y ninguna zona vecina repite color.</sub>
 
 ## Lo que este repositorio impide hacer mal
 

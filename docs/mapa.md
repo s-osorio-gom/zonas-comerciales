@@ -5,7 +5,7 @@ se entiende de un vistazo, el análisis no sirvió.
 
 > **Alcance.** Esta guía describe el mapa completo del proyecto original. El
 > mapa de `ejemplo/mapa.py` implementa una parte: las dos capas (territorio y
-> zona), zonas sin solapes por Voronoi recortado, coloreado por grafo, puntos por
+> zona), zonas sin solapes por Voronoi de puntos disuelto por zona, coloreado por grafo, puntos por
 > frecuencia, el panel de entrada con lo que quedó fuera y el QA visual con
 > Playwright. No implementa la navegación por niveles, las migas de pan, las
 > métricas que se recalculan, el rotulado ni las etapas de carga, y su radio de
@@ -21,8 +21,11 @@ se entiende de un vistazo, el análisis no sirvió.
 Separarlas visualmente es lo que permite responder "de quién es esto" y "quién lo
 recorre" sin confundirlas.
 
-Para la zona: Voronoi recortado al radio de servicio de sus puntos, con cierre
-morfológico y re-recorte contra el teselado para que **no se solapen**. Nunca
+Para la zona: Voronoi de los **puntos** (no de los centros de zona), disuelto por
+zona y recortado al radio de servicio de sus puntos, con cierre morfológico y
+re-recorte contra el teselado para que **no se solapen**. Con celdas por centro de
+zona, un punto asignado a A pero más cerca del centro de B se dibuja dentro de B:
+el mapa contradice la asignación sin que ningún chequeo de solapes lo vea. Nunca
 hexágonos: un hexágono no es una zona, es una celda de agregación.
 
 **Ajustar el radio de servicio al territorio.** Un radio pensado para ciudad

@@ -8,8 +8,9 @@ Aplica lo que dice `docs/mapa.md`:
   · el TERRITORIO del grupo se dibuja como BORDE grueso y la ZONA propuesta como
     RELLENO. Son dos cosas distintas —quién manda dónde, quién lo recorre— y si
     se dibujan igual nadie las separa.
-  · las zonas NO SE SOLAPAN: cada una es su celda de Voronoi recortada al área
-    que sus propios puntos alcanzan. Una envolvente convexa por zona es más
+  · las zonas NO SE SOLAPAN y cada punto cae dentro de la SUYA: cada zona es la
+    unión de las celdas de Voronoi de sus puntos, recortada al área que esos
+    puntos alcanzan. Una envolvente convexa por zona es más
     fácil de programar y produce zonas montadas unas sobre otras, que es
     justamente lo que no puede pasar en un mapa de territorios.
   · el color sale de un COLOREADO DE GRAFO sobre la adyacencia real, no de un
@@ -100,21 +101,28 @@ def _celdas_voronoi(centros: np.ndarray, limite):
 
 def geometrias(pdv, col_zona="zona", col_grupo="grupo",
                radio_factor=1.4, radio_tope_km=9.0):
-    """Polígono de cada zona (sin solapes) y de cada territorio de grupo."""
+    """Polígono de cada zona (sin solapes) y de cada territorio de grupo.
+
+    La celda de Voronoi es la de cada PUNTO, no la del centro de su zona, y las
+    celdas se disuelven por zona. Con celdas por centro, un punto asignado a una
+    zona pero más cerca del centro de la vecina se dibujaba dentro de la vecina:
+    en el ejemplo, 132 de 640 puntos quedaban fuera de su propia zona. Los puntos
+    residuales también son sitios: su celda no se regala a ninguna zona.
+    """
     zonas, territorios = {}, {}
     for grupo, g in pdv.groupby(col_grupo):
         territorios[grupo] = _envolvente(g[["lon", "lat"]].values, holgura_km=0.8)
         con_zona = g[g[col_zona].notna()]
         if con_zona.empty:
             continue
-        etiquetas = sorted(con_zona[col_zona].unique())
-        centros = np.array([[con_zona[con_zona[col_zona] == z].lon.mean(),
-                             con_zona[con_zona[col_zona] == z].lat.mean()]
-                            for z in etiquetas])
-        celdas = _celdas_voronoi(centros, territorios[grupo])
-        for z, celda in zip(etiquetas, celdas):
+        # un sitio por coordenada: Voronoi no admite puntos repetidos
+        sitios = g[["lon", "lat"]].astype(float).round(7).drop_duplicates()
+        celdas = _celdas_voronoi(sitios.values, territorios[grupo])
+        zona_de_sitio = g.loc[sitios.index, col_zona].values
+        for z in sorted(con_zona[col_zona].unique()):
+            union = unary_union([c for c, e in zip(celdas, zona_de_sitio) if e == z])
             puntos = con_zona[con_zona[col_zona] == z][["lon", "lat"]].values
-            geo = celda.intersection(_area_servicio(puntos, radio_factor, radio_tope_km))
+            geo = union.intersection(_area_servicio(puntos, radio_factor, radio_tope_km))
             if not geo.is_empty:
                 zonas[z] = geo
     return zonas, territorios

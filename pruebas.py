@@ -98,6 +98,11 @@ revisar("hay un polígono por zona", len(poligonos) == df[en].zona.nunique())
 solapes = sum(1 for i, a in enumerate(poligonos) for b in list(poligonos)[i + 1:]
               if poligonos[a].intersection(poligonos[b]).area > 1e-9)
 revisar("las zonas no se solapan", solapes == 0, f"{solapes} solapes")
+from shapely.geometry import Point   # noqa: E402
+fuera = [r.zona for r in df[en].itertuples()
+         if not poligonos[r.zona].buffer(1e-9).covers(Point(r.lon, r.lat))]
+revisar("cada punto cae dentro del polígono de su zona", not fuera,
+        f"{len(fuera)} fuera de su zona" if fuera else f"{int(en.sum())} puntos")
 col = M.colorear(poligonos)
 revisar("ninguna zona vecina comparte color", col["choques"] == 0,
         f"{col['vecindades']} vecindades")
