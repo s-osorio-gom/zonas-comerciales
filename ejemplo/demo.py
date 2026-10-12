@@ -90,11 +90,12 @@ def main() -> int:
     # ── 2. plan semanal y rutas, zona por zona ──────────────────────────────
     print("\n── PLAN SEMANAL ────────────────────────────────────────────")
     t = time.time()
-    filas_plan, geometria = [], {}
+    filas_plan, geometria, matrices = [], {}, {}
     for z, g in pdv[en].groupby("zona"):
         g = g.reset_index(drop=True)
         lat, lon = g.lat.values.astype(float), g.lon.values.astype(float)
         P, D = Z.plano(lat, lon), matriz_minutos(lat, lon)
+        matrices[z] = D
         geometria[z] = (area_km2(P), float(g.frecuencia_semana.sum()))
         for fila in PS.plan_de_zona(P, g.venta.values.astype(float),
                                     g.frecuencia_semana.values.astype(float), D):
@@ -113,7 +114,7 @@ def main() -> int:
 
     # ── 3. QA: puede fallar y detener la entrega ────────────────────────────
     print("\n══ VERIFICACIÓN ════════════════════════════════════════════")
-    ok = qa.verificar(pdv, zonas, plan)
+    ok = qa.verificar(pdv, zonas, plan, matrices=matrices)
 
     # ── 4. el conflicto de negocio que el analista NO debe resolver solo ────
     # Donde el territorio es delgado, las dos reglas duras —zona ≥ umbral y zona
@@ -167,9 +168,18 @@ def main() -> int:
     print(f"\n  geometría: {coloreo['vecindades']} vecindades · "
           f"{coloreo['choques']} pares vecinos del mismo color (objetivo 0) · "
           f"{coloreo['solapes']} zonas solapadas (objetivo 0)")
+    print(f"  mapa: {len(coloreo['zonas_sin_poligono'])} zonas sin polígono (objetivo 0) · "
+          f"{coloreo['puntos_fuera_de_su_zona']} puntos fuera de su zona (objetivo 0) · "
+          f"{coloreo['coordenadas_compartidas']} coordenadas compartidas entre zonas o con residuales")
+    # Un mapa que esconde una zona o dibuja puntos en la zona equivocada no se
+    # entrega, aunque el cálculo cuadre.
+    mapa_ok = not (coloreo["solapes"] or coloreo["zonas_sin_poligono"]
+                   or coloreo["puntos_fuera_de_su_zona"])
+    if not mapa_ok:
+        print("  FALLA: el mapa no representa la asignación")
     print("  tiempos: " + " · ".join(f"{k} {v:.1f}s" for k, v in crono.items()))
     print("  salidas en ejemplo/salida/ · abrir mapa_zonas.html")
-    return 0 if ok else 1
+    return 0 if ok and mapa_ok else 1
 
 
 if __name__ == "__main__":

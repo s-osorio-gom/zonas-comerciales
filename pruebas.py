@@ -91,6 +91,16 @@ revisar("cada punto recibe sus visitas de la semana",
 revisar("ningún punto se visita dos veces el mismo día",
         all(len(f["secuencia"]) == len(set(f["secuencia"])) for f in filas))
 
+
+def largo_de(D, sec):
+    return float(sum(D[sec[k], sec[k + 1]] for k in range(len(sec) - 1)))
+
+
+# La secuencia publicada y sus minutos tienen que ser la MISMA ruta.
+revisar("el viaje de cada día es el de su secuencia (modo rápido)",
+        all(abs(largo_de(Dz, f["secuencia"]) - f["min_viaje"]) < 0.06 for f in filas),
+        f"error máximo {max(abs(largo_de(Dz, f['secuencia']) - f['min_viaje']) for f in filas):.2f} min")
+
 print("\n── GEOMETRÍA DEL MAPA ──────────────────────────────────────")
 import mapa as M   # noqa: E402
 poligonos, territorios = M.geometrias(df)
@@ -98,6 +108,53 @@ revisar("hay un polígono por zona", len(poligonos) == df[en].zona.nunique())
 solapes = sum(1 for i, a in enumerate(poligonos) for b in list(poligonos)[i + 1:]
               if poligonos[a].intersection(poligonos[b]).area > 1e-9)
 revisar("las zonas no se solapan", solapes == 0, f"{solapes} solapes")
+from shapely.geometry import Point   # noqa: E402
+fuera = [r.zona for r in df[en].itertuples()
+         if not poligonos[r.zona].buffer(1e-9).covers(Point(r.lon, r.lat))]
+revisar("cada punto cae dentro del polígono de su zona", not fuera,
+        f"{len(fuera)} fuera de su zona" if fuera else f"{int(en.sum())} puntos")
+
+
+def mapa_fiel(d):
+    """(zonas dibujadas, zonas en los datos, puntos fuera de su zona, solapes)."""
+    pol, _ = M.geometrias(d)
+    e = d[d.zona.notna()]
+    afuera = sum(1 for z, x, y in zip(e.zona, e.lon, e.lat)
+                 if z not in pol or not pol[z].buffer(1e-9).covers(Point(x, y)))
+    ks = list(pol)
+    sol = sum(1 for i, a in enumerate(ks) for b in ks[i + 1:] if pol[a].intersection(pol[b]).area > 1e-12)
+    return len(pol), e.zona.nunique(), afuera, sol
+
+
+# Puntos en la MISMA coordenada: antes solo el primero tenía celda y una zona
+# de un punto escondida bajo un residual desaparecía del mapa.
+dup = df.copy()
+dup.loc[[1, 2], ["lat", "lon"]] = dup.loc[0, ["lat", "lon"]].values
+dup.loc[[0, 1, 2], "zona"] = [None, "Z98", dup.zona.dropna().iloc[0]]
+dup.loc[[4], ["lat", "lon"]] = dup.loc[3, ["lat", "lon"]].values
+dup.loc[[3, 4], "zona"] = list(dup.zona.dropna().unique()[:2])
+r_dup = mapa_fiel(dup)
+revisar("puntos que comparten coordenada: ninguna zona desaparece ni queda fuera",
+        r_dup[0] == r_dup[1] and r_dup[2] == 0 and r_dup[3] == 0,
+        f"zonas {r_dup[0]}/{r_dup[1]} · fuera {r_dup[2]} · solapes {r_dup[3]}")
+juntos = df.assign(lat=4.65, lon=-74.08)
+r_jun = mapa_fiel(juntos)
+revisar("todos los puntos en una coordenada: una pieza por zona",
+        r_jun[0] == r_jun[1] and r_jun[2] == 0 and r_jun[3] == 0,
+        f"zonas {r_jun[0]}/{r_jun[1]} · fuera {r_jun[2]} · solapes {r_jun[3]}")
+# Un índice repetido desalineaba las zonas de sus celdas.
+r_idx = mapa_fiel(df.set_axis([0] * 90 + list(range(len(df) - 90)), axis=0))
+revisar("un índice repetido no desalinea el mapa", r_idx[2] == 0 and r_idx[0] == r_idx[1],
+        f"zonas {r_idx[0]}/{r_idx[1]} · fuera {r_idx[2]}")
+# Y la revisión que usa demo.py tiene que ver ambos defectos.
+roto = dict(list(poligonos.items())[1:])
+primera = list(poligonos)[0]
+diag = M.revisar_geometria(df, roto)
+movido = {**poligonos, primera: poligonos[list(poligonos)[1]]}
+revisar("la revisión del mapa detecta zonas sin polígono y puntos fuera",
+        diag["zonas_sin_poligono"] == [primera]
+        and M.revisar_geometria(df, movido)["puntos_fuera_de_su_zona"] > 0
+        and M.revisar_geometria(df, poligonos)["puntos_fuera_de_su_zona"] == 0)
 col = M.colorear(poligonos)
 revisar("ninguna zona vecina comparte color", col["choques"] == 0,
         f"{col['vecindades']} vecindades")
@@ -113,12 +170,73 @@ peores = []
 for s in range(4):
     Pr = np.random.default_rng(s).uniform(0, 5, (14, 2))
     Dr = np.sqrt(((Pr[:, None] - Pr[None]) ** 2).sum(2))
-    o, largo = PS.orden_optimo(Dr, segundos=0.3)
+    o, largo = PS.orden_optimo(Dr)   # sin reloj: con 0,3 s fallaba bajo carga
     largo_real = sum(Dr[o[k], o[k + 1]] for k in range(len(o) - 1))
     if sorted(o) != list(range(14)) or abs(largo - largo_real) > 1e-6 or largo > PS.tour_rapido(Dr) + 1e-6:
         peores.append(s)
 revisar("el solver optimiza el camino abierto que se mide", not peores,
         f"semillas con problema: {peores}" if peores else "4 de 4 instancias")
+
+# Por defecto el solver para por número de soluciones, no por reloj: la misma
+# entrada debe dar la misma ruta aunque la máquina esté cargada.
+Pd = np.random.default_rng(11).uniform(0, 8, (25, 2))
+Dd = np.sqrt(((Pd[:, None] - Pd[None]) ** 2).sum(2))
+r1, r2 = PS.orden_optimo(Dd), PS.orden_optimo(Dd)
+revisar("dos llamadas iguales al solver por defecto dan la misma ruta", r1 == r2,
+        f"{r1[1]:.2f} vs {r2[1]:.2f}")
+
+# Lo que de verdad decide la reproducibilidad: con qué criterio para el solver.
+try:
+    from ortools.constraint_solver import pywrapcp
+    _resolver = pywrapcp.RoutingModel.SolveWithParameters
+    criterios = []
+
+    def _espia(self, par, *a):
+        criterios.append((par.solution_limit,
+                          par.time_limit.seconds * 1000 + par.time_limit.nanos // 1_000_000))
+        return _resolver(self, par, *a)
+
+    pywrapcp.RoutingModel.SolveWithParameters = _espia
+    tope_antes = PS.TOPE_SEGUNDOS
+    try:
+        o_def, l_def = PS.orden_optimo(Dd)
+        o_seg, l_seg = PS.orden_optimo(Dd, segundos=0.2)
+        PS.TOPE_SEGUNDOS = 2.5
+        try:
+            o_dec, _ = PS.orden_optimo(Dd)
+            dec_ok = sorted(o_dec) == list(range(25))
+        except TypeError as e:
+            dec_ok = repr(e)
+    finally:
+        PS.TOPE_SEGUNDOS = tope_antes
+        pywrapcp.RoutingModel.SolveWithParameters = _resolver
+    revisar("por defecto el solver para por número de soluciones",
+            criterios[:1] == [(PS.SOLUCIONES, PS.TOPE_SEGUNDOS * 1000)], f"{criterios[:1]}")
+    revisar("con segundos= el solver para por reloj y la ruta es válida",
+            len(criterios) > 1 and criterios[1][1] == 200 and criterios[1][0] > 10**9
+            and sorted(o_seg) == list(range(25)) and abs(largo_de(Dd, o_seg) - l_seg) < 1e-9,
+            f"{criterios[1:2]} · {l_seg:.2f} min")
+    revisar("un tope del solver con decimales funciona", dec_ok is True and criterios[2:3] == [(PS.SOLUCIONES, 2500)],
+            "" if dec_ok is True else str(dec_ok))
+except ImportError:
+    print("  [—   ] sin OR-Tools: no se comprueba el criterio de parada del solver")
+
+# Sin OR-Tools el orden publicado era el de entrada y los minutos los del
+# heurístico: en el ejemplo, 10.737 min reportados frente a 24.398 reales.
+Pn = np.random.default_rng(5).uniform(0, 5, (14, 2))
+Dn = np.sqrt(((Pn[:, None] - Pn[None]) ** 2).sum(2))
+_ortools = {k: v for k, v in sys.modules.items() if k == "ortools" or k.startswith("ortools.")}
+for k in [*_ortools, "ortools", "ortools.constraint_solver"]:
+    sys.modules[k] = None                # cualquier `import ortools...` lanza ImportError
+try:
+    on, ln = PS.orden_optimo(Dn)
+finally:
+    for k in [k for k in sys.modules if k == "ortools" or k.startswith("ortools.")]:
+        del sys.modules[k]
+    sys.modules.update(_ortools)
+revisar("sin OR-Tools, la secuencia publicada y su viaje son la misma ruta",
+        sorted(on) == list(range(14)) and abs(largo_de(Dn, on) - ln) < 1e-9,
+        f"reportado {ln:.2f} · de la secuencia {largo_de(Dn, on):.2f}")
 
 revisar("el motor usa el mismo módulo de reglas que el usuario",
         Z.R is R and PS.R is R and qa.R is R)
@@ -134,6 +252,22 @@ finally:
 revisar("una semana de seis días incluye el sábado", seis[-1] == "SA" and len(seis) == 6,
         " · ".join(seis))
 
+# Con menos puntos que días, un punto F3 recibía UNA visita: la frecuencia se
+# topaba en el número de sectores, que no puede pasar del número de puntos.
+def visitas_por_punto(frecs):
+    P2 = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])[:len(frecs)]
+    D2 = np.sqrt(((P2[:, None] - P2[None]) ** 2).sum(2)) * 10
+    filas2 = PS.plan_de_zona(P2, np.full(len(frecs), 30e6), np.array(frecs, float), D2, rapido=True)
+    cuenta = [sum(i in f["secuencia"] for f in filas2) for i in range(len(frecs))]
+    distintos = all(len(f["secuencia"]) == len(set(f["secuencia"])) for f in filas2)
+    return cuenta, distintos
+
+
+c1, ok1 = visitas_por_punto([3])
+c2, ok2 = visitas_por_punto([3, 2])
+revisar("una zona más chica que la semana respeta la frecuencia",
+        c1 == [3] and c2 == [3, 2] and ok1 and ok2, f"F3 → {c1} · F3,F2 → {c2}")
+
 
 def lanza(fn):
     try:
@@ -145,6 +279,35 @@ def lanza(fn):
 
 malo = base(30).assign(venta=lambda d: d.venta.where(d.index != 3))
 revisar("una venta nula se rechaza con ValueError", lanza(lambda: Z.zonificar_grupo(malo)))
+try:
+    Z.zonificar_grupo(base(30).assign(venta="abc"))
+    msg = ""
+except ValueError as e:
+    msg = str(e)
+revisar("una venta no numérica se rechaza nombrando la columna", "'venta'" in msg, msg)
+
+
+def mensaje(fn):
+    try:
+        fn()
+    except ValueError as e:
+        return str(e)
+    except Exception as e:   # noqa: BLE001
+        return f"{type(e).__name__} (no ValueError): {e}"
+    return "aceptado"
+
+
+m_ases = mensaje(lambda: Z.zonificar_grupo(base(30), asesores="3"))
+m_txt = mensaje(lambda: Z.zonificar_grupo(base(30).assign(venta="5000000")))
+m_bool = mensaje(lambda: Z.zonificar_grupo(base(30).assign(venta=True)))
+m_frac = mensaje(lambda: Z.zonificar_grupo(base(30), asesores=1.5))
+revisar("tipos inválidos se rechazan con un mensaje claro",
+        m_ases.startswith("asesores debe") and "'venta' tiene 30 valores no numéricos" in m_txt
+        and "'venta' es booleana" in m_bool and m_frac.startswith("asesores debe"),
+        f"'3' → {m_ases[:40]} · texto → {m_txt[:40]} · bool → {m_bool[:30]} · 1,5 → {m_frac[:20]}")
+obj = base(30).assign(venta=lambda d: d.venta.astype(object))
+revisar("una columna de números en dtype object se acepta",
+        mensaje(lambda: Z.zonificar_grupo(obj)) == "aceptado")
 revisar("una columna faltante se rechaza con ValueError",
         lanza(lambda: Z.zonificar_grupo(base(30).drop(columns="frecuencia_semana"))))
 z0, inf0 = Z.zonificar_grupo(base(), asesores=0)
@@ -160,6 +323,19 @@ zonas_df = df[en].groupby("zona").venta.sum().reset_index()
 with contextlib.redirect_stdout(io.StringIO()):
     ok_vacio = qa.verificar(df, zonas_df, sin_plan)
 revisar("el QA falla (sin romperse) si no hay plan semanal", ok_vacio is False)
+
+z0 = g.zona.iloc[0] if "zona" in g.columns else "Z"
+plan_z = pd.DataFrame([{**f, "zona": z0} for f in filas])
+zonas_z = pd.DataFrame({"zona": [z0], "venta": [g.venta.sum()]})
+with contextlib.redirect_stdout(io.StringIO()):
+    ok_bien = qa.verificar(g, zonas_z, plan_z, matrices={z0: Dz})
+    alterado = plan_z.copy()
+    largo_dia = alterado.secuencia.map(len).idxmax()
+    alterado.at[largo_dia, "secuencia"] = sorted(alterado.at[largo_dia, "secuencia"],
+                                                key=lambda i: Pn[i % 14, 0])
+    ok_mal = qa.verificar(g, zonas_z, alterado, matrices={z0: Dz})
+revisar("el QA recalcula el viaje: falla si la secuencia no es la de los minutos",
+        ok_bien is True and ok_mal is False, f"plan correcto {ok_bien} · alterado {ok_mal}")
 
 quincenal = df.assign(pdv_id=[f"P{i:03d}" for i in range(len(df))])
 quincenal.loc[quincenal.index[0], "frecuencia_semana"] = 0.5
@@ -177,6 +353,8 @@ revisar("el QA visual pasa un panel completo", QV.veredicto(10, [], panel_ok) ==
 revisar("el QA visual falla con NaN en pantalla", bool(QV.veredicto(10, [], panel_ok + " NaN")))
 revisar("el QA visual falla si al panel le falta un bloque",
         bool(QV.veredicto(10, [], "Zonas propuestas")))
+revisar("el QA visual falla si algo tapa el control de zoom",
+        bool(QV.veredicto(10, [], panel_ok, [".leaflet-control-zoom-in"])))
 
 print("\n" + "─" * 60)
 print(f"  {len(fallos)} fallos")

@@ -14,7 +14,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt ruff
+      - run: pip install -r requirements.txt ruff==0.17.0   # fijo: una versión nueva puede traer reglas nuevas
       - name: Análisis estático
         run: ruff check .
       - name: Invariantes del motor
