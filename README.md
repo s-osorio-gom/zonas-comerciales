@@ -110,10 +110,12 @@ Salida real (extracto):
   MIN_POR_KM actual 6.59 → medido 11.43 · correlación 0.981 sobre 23 zonas
   ...
   geometría: 59 vecindades · 0 pares vecinos del mismo color (objetivo 0) · 0 zonas solapadas (objetivo 0)
+  mapa: 0 zonas sin polígono (objetivo 0) · 0 puntos fuera de su zona (objetivo 0) · 0 coordenadas compartidas entre zonas o con residuales
 ```
 
 Es decir: 23 zonas sobre tres territorios, el 100 % de la venta capturada, cero
-zonas solapadas y cero pares de zonas vecinas del mismo color. Los 2 avisos son
+zonas solapadas, cero pares de zonas vecinas del mismo color y cada punto
+dibujado dentro de su zona (si no, `demo.py` sale con código 1). Los 2 avisos son
 9 días no viables y 2 en alerta en el territorio rural, que **no** son un
 defecto del cálculo: son el conflicto de negocio real —el terreno exige más
 asesores de los que la venta paga— y el modelo no debe resolverlo solo.
@@ -192,7 +194,7 @@ sobre 23 zonas; sobre los datos sintéticos propone subir `MIN_POR_KM` de 6,59 a
 ## Verificación
 
 ```bash
-python3 pruebas.py                     # 36 comprobaciones (invariantes y regresiones), ~10 s
+python3 pruebas.py                     # 48 comprobaciones (invariantes y regresiones), ~12 s
 pip install ruff==0.17.0 && ruff check .   # análisis estático, reglas en ruff.toml
 python3 ejemplo/qa_visual.py           # abre el mapa en Chromium: escritorio y teléfono
 ```
