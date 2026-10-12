@@ -6,7 +6,7 @@ qa_visual.py — el protocolo de QA visual de `docs/mapa.md`, automatizado.
     python3 ejemplo/qa_visual.py
 
 Abre el mapa en un navegador de verdad —escritorio 1440×900 y teléfono
-390×844—, comprueba que nada tape el zoom, espera a que la capa termine de pintar,
+390×844 vertical y apaisado—, comprueba que nada tape el zoom, espera a que la capa termine de pintar,
 recoge los errores de JavaScript y guarda capturas. **Mirar las capturas** es el
 paso que no se puede automatizar: cifras que no coinciden entre panel y tooltip,
 etiquetas que tapan datos o estados mal marcados solo se ven así.
@@ -94,18 +94,23 @@ def main() -> int:
         pg.screenshot(path=str(SALIDA / "qa_02_zona.png"))
         print(f"  zoom sobre       {z}")
 
-        # Teléfono: el panel debe arrancar plegado y dejar ver el mapa.
-        mv = nav.new_page(viewport={"width": 390, "height": 844}, is_mobile=True,
-                          has_touch=True, device_scale_factor=2)
-        mv.on("pageerror", lambda e: errores.append(str(e)))
-        mv.goto(MAPA.as_uri())
-        mv.wait_for_selector(".leaflet-container", timeout=30_000)
-        mv.wait_for_timeout(3_000)
-        tapados += [f"{s} (móvil)" for s in mv.evaluate(TAPADOS_JS, list(CONTROLES))]
-        ancho = mv.evaluate("document.documentElement.scrollWidth")
-        if ancho > 390:
-            tapados.append(f"scroll horizontal en móvil ({ancho} px)")
-        mv.screenshot(path=str(SALIDA / "qa_03_movil.png"))
+        # Teléfono, vertical y apaisado: el panel debe arrancar plegado y dejar
+        # ver el mapa. Apaisado (844×390) el panel abierto ocupaba casi todo el alto.
+        for nombre, (ancho_v, alto_v), archivo in (("vertical", (390, 844), "qa_03_movil.png"),
+                                                    ("apaisado", (844, 390), "qa_04_movil_apaisado.png")):
+            mv = nav.new_page(viewport={"width": ancho_v, "height": alto_v}, is_mobile=True,
+                              has_touch=True, device_scale_factor=2)
+            mv.on("pageerror", lambda e: errores.append(str(e)))
+            mv.goto(MAPA.as_uri())
+            mv.wait_for_selector(".leaflet-container", timeout=30_000)
+            mv.wait_for_timeout(3_000)
+            tapados += [f"{s} (móvil {nombre})" for s in mv.evaluate(TAPADOS_JS, list(CONTROLES))]
+            if mv.evaluate("document.getElementById('panel-zonas')?.open === true"):
+                tapados.append(f"panel abierto al cargar en móvil {nombre}")
+            ancho = mv.evaluate("document.documentElement.scrollWidth")
+            if ancho > ancho_v:
+                tapados.append(f"scroll horizontal en móvil {nombre} ({ancho} px)")
+            mv.screenshot(path=str(SALIDA / archivo))
         nav.close()
 
     print(f"  formas dibujadas    {capas}")

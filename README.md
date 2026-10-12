@@ -185,7 +185,7 @@ Las 1.000 soluciones acortan la ruta un 0,3 % por cinco veces el tiempo. Pasar
 **Y el estimador de viaje se calibra, no se supone.** Dentro de la zonificación
 aún no hay ruta que medir, así que se estima con Beardwood–Halton–Hammersley.
 Esa constante es inventada hasta que se contrasta contra rutas ya calculadas:
-`Z.calibrar_viaje()` lo hace y el ejemplo lo corre al final (correlación 0,982
+`Z.calibrar_viaje()` lo hace y el ejemplo lo corre al final (correlación 0,981
 sobre 23 zonas; sobre los datos sintéticos propone subir `MIN_POR_KM` de 6,59 a
 11,43; el ejemplo lo imprime y no lo aplica solo).
 
@@ -203,7 +203,8 @@ completa de `demo.py` en cada push a `main` y en cada pull request.
 `qa_visual.py` automatiza el protocolo de **[`docs/mapa.md`](docs/mapa.md)** hasta
 donde se puede: errores de JavaScript, peticiones fallidas, formas dibujadas,
 `NaN` en pantalla, controles de zoom tapados (en 1440×900 y en un teléfono de
-390×844) y scroll horizontal en el teléfono. El último paso no es automatizable —hay que **mirar las
+390×844, vertical y apaisado), panel abierto al cargar en el teléfono y scroll
+horizontal. El último paso no es automatizable —hay que **mirar las
 capturas**— y es el que encuentra lo que importa. En este repositorio encontró
 así que el fondo de mapa por defecto de Folium había pasado a exigir llave y
 estampaba «API KEY REQUIRED» sobre todo el mapa, con cero errores en consola.
@@ -212,11 +213,11 @@ Requiere `pip install "playwright==1.63.*" && playwright install chromium`, habe
 corrido `demo.py` antes y red para las teselas del fondo. Sale con código 1 si hay
 errores de JavaScript, ninguna forma dibujada, `NaN` en pantalla, un bloque del
 panel ausente o un control tapado. Guarda `qa_01_general.png`, `qa_02_zona.png` y
-`qa_03_movil.png`.
+`qa_03_movil.png` y `qa_04_movil_apaisado.png`.
 
 <img src="docs/img/zonas-movil.png" width="260" alt="El mapa en un teléfono: panel plegado al pie">
 
-<sub>En un teléfono el panel arranca plegado al pie («ver resumen ▾»).</sub>
+<sub>En un teléfono, vertical o apaisado, el panel arranca plegado al pie («ver resumen ▾»).</sub>
 
 ## Qué NO hace
 

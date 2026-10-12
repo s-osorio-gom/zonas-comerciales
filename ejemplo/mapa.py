@@ -264,8 +264,8 @@ def _panel(resumen: dict, parametros: dict) -> str:
                 "<div style='color:#4b5563'>Borde a rayas = territorio del grupo</div>")
 
     # El panel deja libre el control de zoom (arriba a la izquierda) y se pliega.
-    # En pantallas estrechas baja al pie y arranca plegado: abierto tapaba casi
-    # todo el mapa en un teléfono.
+    # En pantallas estrechas o bajas (teléfono vertical o apaisado) baja al pie y
+    # arranca plegado: abierto tapaba casi todo el mapa.
     return f"""
     <style>
       #panel-zonas {{position:fixed;top:12px;left:54px;z-index:9999;width:288px;
@@ -275,7 +275,7 @@ def _panel(resumen: dict, parametros: dict) -> str:
       #panel-zonas summary {{cursor:pointer;font-size:14px;font-weight:700}}
       #panel-zonas summary::after {{content:" · ver resumen ▾";font-weight:400;color:#6b7280}}
       #panel-zonas[open] summary::after {{content:" ▴"}}
-      @media (max-width:600px) {{
+      @media (max-width:600px), (max-height:500px) {{
         #panel-zonas {{top:auto;bottom:56px;left:8px;right:8px;width:auto;max-height:50vh}}
       }}
     </style>
@@ -290,7 +290,7 @@ def _panel(resumen: dict, parametros: dict) -> str:
       {leyenda()}
     </details>
     <script>
-      if (window.matchMedia("(max-width:600px)").matches)
+      if (window.matchMedia("(max-width:600px), (max-height:500px)").matches)
         document.getElementById("panel-zonas").removeAttribute("open");
     </script>"""
 
