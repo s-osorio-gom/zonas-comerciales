@@ -113,6 +113,48 @@ fuera = [r.zona for r in df[en].itertuples()
          if not poligonos[r.zona].buffer(1e-9).covers(Point(r.lon, r.lat))]
 revisar("cada punto cae dentro del polígono de su zona", not fuera,
         f"{len(fuera)} fuera de su zona" if fuera else f"{int(en.sum())} puntos")
+
+
+def mapa_fiel(d):
+    """(zonas dibujadas, zonas en los datos, puntos fuera de su zona, solapes)."""
+    pol, _ = M.geometrias(d)
+    e = d[d.zona.notna()]
+    afuera = sum(1 for z, x, y in zip(e.zona, e.lon, e.lat)
+                 if z not in pol or not pol[z].buffer(1e-9).covers(Point(x, y)))
+    ks = list(pol)
+    sol = sum(1 for i, a in enumerate(ks) for b in ks[i + 1:] if pol[a].intersection(pol[b]).area > 1e-12)
+    return len(pol), e.zona.nunique(), afuera, sol
+
+
+# Puntos en la MISMA coordenada: antes solo el primero tenía celda y una zona
+# de un punto escondida bajo un residual desaparecía del mapa.
+dup = df.copy()
+dup.loc[[1, 2], ["lat", "lon"]] = dup.loc[0, ["lat", "lon"]].values
+dup.loc[[0, 1, 2], "zona"] = [None, "Z98", dup.zona.dropna().iloc[0]]
+dup.loc[[4], ["lat", "lon"]] = dup.loc[3, ["lat", "lon"]].values
+dup.loc[[3, 4], "zona"] = list(dup.zona.dropna().unique()[:2])
+r_dup = mapa_fiel(dup)
+revisar("puntos que comparten coordenada: ninguna zona desaparece ni queda fuera",
+        r_dup[0] == r_dup[1] and r_dup[2] == 0 and r_dup[3] == 0,
+        f"zonas {r_dup[0]}/{r_dup[1]} · fuera {r_dup[2]} · solapes {r_dup[3]}")
+juntos = df.assign(lat=4.65, lon=-74.08)
+r_jun = mapa_fiel(juntos)
+revisar("todos los puntos en una coordenada: una pieza por zona",
+        r_jun[0] == r_jun[1] and r_jun[2] == 0 and r_jun[3] == 0,
+        f"zonas {r_jun[0]}/{r_jun[1]} · fuera {r_jun[2]} · solapes {r_jun[3]}")
+# Un índice repetido desalineaba las zonas de sus celdas.
+r_idx = mapa_fiel(df.set_axis([0] * 90 + list(range(len(df) - 90)), axis=0))
+revisar("un índice repetido no desalinea el mapa", r_idx[2] == 0 and r_idx[0] == r_idx[1],
+        f"zonas {r_idx[0]}/{r_idx[1]} · fuera {r_idx[2]}")
+# Y la revisión que usa demo.py tiene que ver ambos defectos.
+roto = dict(list(poligonos.items())[1:])
+primera = list(poligonos)[0]
+diag = M.revisar_geometria(df, roto)
+movido = {**poligonos, primera: poligonos[list(poligonos)[1]]}
+revisar("la revisión del mapa detecta zonas sin polígono y puntos fuera",
+        diag["zonas_sin_poligono"] == [primera]
+        and M.revisar_geometria(df, movido)["puntos_fuera_de_su_zona"] > 0
+        and M.revisar_geometria(df, poligonos)["puntos_fuera_de_su_zona"] == 0)
 col = M.colorear(poligonos)
 revisar("ninguna zona vecina comparte color", col["choques"] == 0,
         f"{col['vecindades']} vecindades")

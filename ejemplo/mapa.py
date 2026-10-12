@@ -29,7 +29,8 @@ from html import escape
 import folium
 import numpy as np
 from scipy.spatial import Voronoi
-from shapely.geometry import MultiPoint, Polygon
+import pandas as pd
+from shapely.geometry import MultiPoint, Point, Polygon
 from shapely.ops import unary_union
 
 # Paleta neutra de trabajo. Sustituir por la de la marca de cada quien.
@@ -43,6 +44,7 @@ GRIS_BORDE = "#4A5462"
 COLOR_FRECUENCIA = {1: "#C3CBD6", 2: "#6B7A90", 3: "#16202E"}
 
 KM_POR_GRADO = 110.57
+_TOL = 1e-9          # grados (~0,1 mm): tolerancia de «cubre» y «contiene»
 
 
 def nivel_frecuencia(f) -> int:
@@ -81,22 +83,58 @@ def _celdas_voronoi(centros: np.ndarray, limite):
 
     Se añaden cuatro puntos muy lejanos para que ninguna región real quede
     abierta: las regiones infinitas de un Voronoi no se pueden dibujar.
+
+    Qhull no separa sitios casi idénticos: dos sitios a menos de ~1e-7 de la
+    extensión del grupo comparten región, o uno recibe una astilla que ni
+    siquiera lo contiene. Esos sitios reciben celda VACÍA y quedan para que
+    `geometrias` los aloje en la celda que sí los cubre. Nunca se devuelve el
+    límite entero como celda: se solaparía con todas las demás.
     """
+    if len(centros) == 1:
+        return [limite]
     minx, miny, maxx, maxy = limite.bounds
     w, h = max(maxx - minx, 1e-4), max(maxy - miny, 1e-4)
     lejos = np.array([[minx - 5 * w, miny - 5 * h], [minx - 5 * w, maxy + 5 * h],
                       [maxx + 5 * w, miny - 5 * h], [maxx + 5 * w, maxy + 5 * h]])
-    if len(centros) == 1:
-        return [limite]
     vor = Voronoi(np.vstack([centros, lejos]))
-    celdas = []
+    celdas, vistas = [], set()
     for i in range(len(centros)):
-        region = vor.regions[vor.point_region[i]]
-        if not region or -1 in region or len(region) < 3:
-            celdas.append(limite)
-            continue
-        celdas.append(Polygon(vor.vertices[region]).buffer(0).intersection(limite))
+        r = vor.point_region[i]
+        region = vor.regions[r]
+        celda = Polygon()
+        if r not in vistas and region and -1 not in region and len(region) >= 3:
+            c = Polygon(vor.vertices[region]).buffer(0)
+            if c.buffer(_TOL).covers(Point(centros[i])):
+                celda = c.intersection(limite)
+                vistas.add(r)
+        celdas.append(celda)
     return celdas
+
+
+def _sectores(celda, centro, zonas: list, angulos: dict) -> dict:
+    """Parte `celda` en un sector angular por zona, con vértice en `centro`.
+
+    Para cuando varias zonas tienen puntos en la MISMA coordenada (o a
+    milímetros): una celda no puede ser de dos zonas a la vez y ninguna puede
+    desaparecer. Cada sector toca el centro, así que cubre los puntos que están
+    en él. Si una zona tiene un punto apenas desplazado, su sector se centra en
+    esa dirección para cubrirlo también.
+    """
+    k = len(zonas)
+    if k == 1:
+        return {zonas[0]: celda}
+    minx, miny, maxx, maxy = celda.bounds
+    radio = 4 * max(maxx - minx, maxy - miny, 1e-6)
+    paso = 2 * np.pi / k
+    orden = sorted(zonas, key=lambda z: (angulos.get(z) is None, angulos.get(z) or 0.0, z))
+    inicio = (angulos.get(orden[0]) or 0.0) - paso / 2
+    cx, cy = float(centro[0]), float(centro[1])
+    partes = {}
+    for i, z in enumerate(orden):
+        a = np.linspace(inicio + i * paso, inicio + (i + 1) * paso, 12)
+        cuña = Polygon([(cx, cy)] + [(cx + radio * np.cos(x), cy + radio * np.sin(x)) for x in a])
+        partes[z] = celda.intersection(cuña)
+    return partes
 
 
 def geometrias(pdv, col_zona="zona", col_grupo="grupo",
@@ -108,24 +146,77 @@ def geometrias(pdv, col_zona="zona", col_grupo="grupo",
     zona pero más cerca del centro de la vecina se dibujaba dentro de la vecina:
     en el ejemplo, 132 de 640 puntos quedaban fuera de su propia zona. Los puntos
     residuales también son sitios: su celda no se regala a ninguna zona.
+
+    Puntos que comparten coordenada (regla explícita):
+      · varias zonas en la misma coordenada → la celda se parte en un sector
+        angular por zona (`_sectores`); ninguna zona desaparece;
+      · un residual en la coordenada de una zona → la celda es de la zona y el
+        residual se dibuja encima de ella. `revisar_geometria` lo cuenta.
+    El trabajo es por POSICIÓN, no por índice: un índice repetido desalineaba
+    las zonas de sus celdas.
     """
     zonas, territorios = {}, {}
     for grupo, g in pdv.groupby(col_grupo):
-        territorios[grupo] = _envolvente(g[["lon", "lat"]].values, holgura_km=0.8)
-        con_zona = g[g[col_zona].notna()]
-        if con_zona.empty:
+        g = g.reset_index(drop=True)
+        xy = g[["lon", "lat"]].to_numpy(float)
+        territorios[grupo] = _envolvente(xy, holgura_km=0.8)
+        etiqueta = g[col_zona].to_numpy(object)
+        tiene = g[col_zona].notna().to_numpy()
+        if not tiene.any():
             continue
-        # un sitio por coordenada: Voronoi no admite puntos repetidos
-        sitios = g[["lon", "lat"]].astype(float).round(7).drop_duplicates()
-        celdas = _celdas_voronoi(sitios.values, territorios[grupo])
-        zona_de_sitio = g.loc[sitios.index, col_zona].values
-        for z in sorted(con_zona[col_zona].unique()):
-            union = unary_union([c for c, e in zip(celdas, zona_de_sitio) if e == z])
-            puntos = con_zona[con_zona[col_zona] == z][["lon", "lat"]].values
-            geo = union.intersection(_area_servicio(puntos, radio_factor, radio_tope_km))
+        sitios, cual = np.unique(np.round(xy, 9), axis=0, return_inverse=True)
+        cual = np.asarray(cual).ravel()
+        celdas = _celdas_voronoi(sitios, territorios[grupo])
+        # cada sitio sin celda propia se aloja en la celda que lo cubre
+        anfitrion = np.arange(len(sitios))
+        for s in np.flatnonzero([c.is_empty for c in celdas]):
+            pt = Point(sitios[s])
+            cerca = np.argsort(((sitios - sitios[s]) ** 2).sum(1))
+            anfitrion[s] = next((int(h) for h in cerca
+                                 if not celdas[h].is_empty and celdas[h].buffer(_TOL).covers(pt)),
+                                int(next(h for h in cerca if not celdas[h].is_empty)))
+        piezas = {}
+        for h in np.unique(anfitrion):
+            miembros = np.flatnonzero(anfitrion[cual] == h)
+            con = [i for i in miembros if tiene[i]]
+            if not con:
+                continue                       # celda de un residual: de nadie
+            presentes = sorted({etiqueta[i] for i in con})
+            angulos = {}
+            for i in con:
+                d = xy[i] - sitios[h]
+                if np.hypot(*d) > 0 and etiqueta[i] not in angulos:
+                    angulos[etiqueta[i]] = float(np.arctan2(d[1], d[0]))
+            for z, parte in _sectores(celdas[h], sitios[h], presentes, angulos).items():
+                piezas.setdefault(z, []).append(parte)
+        for z in sorted(piezas):
+            puntos = xy[[i for i in range(len(g)) if tiene[i] and etiqueta[i] == z]]
+            geo = unary_union(piezas[z]).intersection(
+                _area_servicio(puntos, radio_factor, radio_tope_km))
             if not geo.is_empty:
                 zonas[z] = geo
     return zonas, territorios
+
+
+def revisar_geometria(pdv, poligonos: dict, col_zona="zona", col_grupo="grupo") -> dict:
+    """Lo que el mapa podría estar diciendo mal, contado.
+
+    · zonas sin polígono: una zona que existe en los datos y no se dibuja;
+    · puntos fuera de su zona: el mapa contradice la asignación;
+    · coordenadas compartidas: puntos de zonas distintas (o un residual y una
+      zona) en el mismo sitio, resueltos con la regla de `geometrias`.
+    Las dos primeras son defectos del entregable; la tercera es un aviso.
+    """
+    en = pdv[pdv[col_zona].notna()]
+    sin = sorted(set(en[col_zona]) - set(poligonos))
+    fuera = [i for i, (z, x, y) in enumerate(zip(en[col_zona], en.lon, en.lat))
+             if z in poligonos and not poligonos[z].buffer(_TOL).covers(Point(float(x), float(y)))]
+    clave = pd.DataFrame({"g": pdv[col_grupo].to_numpy(), "x": pdv.lon.round(7).to_numpy(),
+                          "y": pdv.lat.round(7).to_numpy(),
+                          "z": pdv[col_zona].astype(object).where(pdv[col_zona].notna(), "·residual")})
+    compartidas = int((clave.groupby(["g", "x", "y"]).z.nunique() > 1).sum())
+    return {"zonas_sin_poligono": sin, "puntos_fuera_de_su_zona": len(fuera),
+            "coordenadas_compartidas": compartidas}
 
 
 def colorear(poligonos: dict, tolerancia_km: float = 0.6) -> dict:
@@ -281,4 +372,5 @@ def construir(pdv, zonas, resumen, parametros, salida,
         1 for i, a in enumerate(poligonos) for b in list(poligonos)[i + 1:]
         if poligonos[a].intersection(poligonos[b]).area > 1e-9)
     coloreo["solapes"] = solapes
+    coloreo.update(revisar_geometria(pdv, poligonos, col_zona, col_grupo))
     return coloreo

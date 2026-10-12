@@ -168,9 +168,18 @@ def main() -> int:
     print(f"\n  geometría: {coloreo['vecindades']} vecindades · "
           f"{coloreo['choques']} pares vecinos del mismo color (objetivo 0) · "
           f"{coloreo['solapes']} zonas solapadas (objetivo 0)")
+    print(f"  mapa: {len(coloreo['zonas_sin_poligono'])} zonas sin polígono (objetivo 0) · "
+          f"{coloreo['puntos_fuera_de_su_zona']} puntos fuera de su zona (objetivo 0) · "
+          f"{coloreo['coordenadas_compartidas']} coordenadas compartidas entre zonas o con residuales")
+    # Un mapa que esconde una zona o dibuja puntos en la zona equivocada no se
+    # entrega, aunque el cálculo cuadre.
+    mapa_ok = not (coloreo["solapes"] or coloreo["zonas_sin_poligono"]
+                   or coloreo["puntos_fuera_de_su_zona"])
+    if not mapa_ok:
+        print("  FALLA: el mapa no representa la asignación")
     print("  tiempos: " + " · ".join(f"{k} {v:.1f}s" for k, v in crono.items()))
     print("  salidas en ejemplo/salida/ · abrir mapa_zonas.html")
-    return 0 if ok else 1
+    return 0 if ok and mapa_ok else 1
 
 
 if __name__ == "__main__":
