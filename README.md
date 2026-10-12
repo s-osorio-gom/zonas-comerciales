@@ -84,8 +84,10 @@ python3 ejemplo/demo.py             # zonifica, planifica, verifica, dibuja
 open ejemplo/salida/mapa_zonas.html # en Linux: xdg-open
 ```
 
-Entre 30 y 40 segundos en un portátil de 8 núcleos; la primera corrida tras
-instalar puede tardar bastante más mientras se cargan las librerías. Sale con código 1 si el QA encuentra un fallo crítico: un
+Unos 35 segundos de CPU: entre 30 y 40 s de reloj en un portátil de 8 núcleos
+desocupado. La primera corrida tras instalar y una máquina cargada tardan más
+(se midieron hasta 6 minutos con la CPU saturada), pero el resultado es el mismo
+byte a byte. Sale con código 1 si el QA encuentra un fallo crítico: un
 entregable que no cuadra no se publica. Escribe en `ejemplo/salida/` el mapa y
 tres CSV: `pdv_con_zona.csv`, `zonas.csv` y `plan_semanal.csv` (un día-zona por
 fila, con secuencia de visita, minutos de atención, de viaje y estado).
