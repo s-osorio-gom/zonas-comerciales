@@ -55,11 +55,20 @@ def tour_rapido(D):
     Vecino más cercano + 2-opt: queda un 5-8 % por encima del óptimo, suficiente
     para comparar dos alternativas, y corre en microsegundos.
     """
+    return ruta_rapida(D)[1]
+
+
+def ruta_rapida(D):
+    """(orden, longitud) del heurístico. La longitud es la de ESE orden.
+
+    Publicar una secuencia con el largo de otra ruta hacía que el plan dijera
+    10.737 min de viaje cuando recorrer la secuencia publicada costaba 24.398.
+    """
     n = len(D)
     if n <= 1:
-        return 0.0
+        return list(range(n)), 0.0
     if n == 2:
-        return float(D[0, 1])
+        return [0, 1], float(D[0, 1])
     visto = np.zeros(n, bool); ruta = [0]; visto[0] = True
     for _ in range(n - 1):
         d = np.where(visto, np.inf, D[ruta[-1]])
@@ -77,13 +86,15 @@ def tour_rapido(D):
                     r[a:b + 1] = r[a:b + 1][::-1]; mejora = True
         if not mejora:
             break
-    return float(sum(D[r[k], r[k + 1]] for k in range(n - 1)))
+    orden = [int(x) for x in r]
+    return orden, float(sum(D[orden[k], orden[k + 1]] for k in range(n - 1)))
 
 
 def orden_optimo(D, segundos=None):
     """Orden de visita con OR-Tools. Solo para la ruta FINAL que se publica.
 
-    Si OR-Tools no está disponible, cae al heurístico sin romper nada.
+    Si OR-Tools no está disponible, o no devuelve solución, publica el orden del
+    heurístico CON SU largo: secuencia y minutos siempre corresponden.
 
     Por defecto (`segundos=None`) la búsqueda local guiada para tras SOLUCIONES
     soluciones: el mismo día da siempre la misma ruta, en cualquier máquina y
@@ -101,7 +112,7 @@ def orden_optimo(D, segundos=None):
     try:
         from ortools.constraint_solver import routing_enums_pb2, pywrapcp
     except ImportError:
-        return list(range(n)), tour_rapido(D)
+        return ruta_rapida(D)
     # El día es un recorrido ABIERTO: empieza en una parada y termina en otra.
     # OR-Tools resuelve circuitos cerrados, así que se añade un depósito ficticio
     # (nodo n) a coste cero de todos: el circuito óptimo por él equivale al
@@ -124,7 +135,7 @@ def orden_optimo(D, segundos=None):
         par.time_limit.FromMilliseconds(int(segundos * 1000))
     sol = rut.SolveWithParameters(par)
     if not sol:
-        return list(range(n)), tour_rapido(D)
+        return ruta_rapida(D)
     orden, i = [], sol.Value(rut.NextVar(rut.Start(0)))
     while not rut.IsEnd(i):
         orden.append(g.IndexToNode(i))
@@ -252,7 +263,8 @@ def plan_de_zona(P, venta, frecuencias, D, rapido=False, segundos=None):
             continue
         sub = D[np.ix_(ii, ii)]
         if rapido:
-            viaje, sec = tour_rapido(sub), list(ii)
+            orden, viaje = ruta_rapida(sub)
+            sec = [int(ii[k]) for k in orden]
         else:
             orden, viaje = orden_optimo(sub, segundos)
             sec = [int(ii[k]) for k in orden]

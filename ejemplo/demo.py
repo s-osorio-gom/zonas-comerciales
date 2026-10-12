@@ -90,11 +90,12 @@ def main() -> int:
     # ── 2. plan semanal y rutas, zona por zona ──────────────────────────────
     print("\n── PLAN SEMANAL ────────────────────────────────────────────")
     t = time.time()
-    filas_plan, geometria = [], {}
+    filas_plan, geometria, matrices = [], {}, {}
     for z, g in pdv[en].groupby("zona"):
         g = g.reset_index(drop=True)
         lat, lon = g.lat.values.astype(float), g.lon.values.astype(float)
         P, D = Z.plano(lat, lon), matriz_minutos(lat, lon)
+        matrices[z] = D
         geometria[z] = (area_km2(P), float(g.frecuencia_semana.sum()))
         for fila in PS.plan_de_zona(P, g.venta.values.astype(float),
                                     g.frecuencia_semana.values.astype(float), D):
@@ -113,7 +114,7 @@ def main() -> int:
 
     # ── 3. QA: puede fallar y detener la entrega ────────────────────────────
     print("\n══ VERIFICACIÓN ════════════════════════════════════════════")
-    ok = qa.verificar(pdv, zonas, plan)
+    ok = qa.verificar(pdv, zonas, plan, matrices=matrices)
 
     # ── 4. el conflicto de negocio que el analista NO debe resolver solo ────
     # Donde el territorio es delgado, las dos reglas duras —zona ≥ umbral y zona

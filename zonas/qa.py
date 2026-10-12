@@ -9,8 +9,10 @@ Un dato que no cuadra aquí no se explica en una nota al pie: se corrige.
 Uso:
     import qa
     ok = qa.verificar(pdv, zonas, plan)   # DataFrames; imprime y devuelve bool
+    ok = qa.verificar(pdv, zonas, plan, matrices={zona: D, ...})   # y recalcula el viaje
 """
 from pathlib import Path
+import ast
 import sys
 
 try:                       # dentro del paquete: el MISMO `zonas.reglas` del usuario
@@ -21,10 +23,15 @@ except ImportError:        # módulo copiado suelto a otro proyecto
 
 
 def verificar(pdv, zonas, plan, col_zona="zona", col_venta="venta",
-              col_grupo="grupo", col_frec="frecuencia_semana"):
+              col_grupo="grupo", col_frec="frecuencia_semana", matrices=None):
     """pdv: una fila por punto, con `col_zona` nulo si quedó residual.
        zonas: una fila por zona, con `col_venta` agregada.
-       plan:  una fila por día-zona, con min_servicio, min_viaje, min_total."""
+       plan:  una fila por día-zona, con min_servicio, min_viaje, min_total y
+              `secuencia` (índices dentro de la zona).
+       matrices: {zona: matriz de minutos} con la que se planificó. Si se da, el
+              viaje de cada secuencia publicada se RECALCULA y se compara con el
+              reportado: es la única forma de saber que los minutos son los de
+              esa ruta y no los de otra."""
     fallos, avisos, n_ok, n = [], [], 0, 0
 
     def prueba(nombre, ok, detalle="", critico=True):
@@ -72,6 +79,21 @@ def verificar(pdv, zonas, plan, col_zona="zona", col_venta="venta",
         return _cierre(n_ok, n, fallos, avisos)
     e = float((plan.min_servicio + plan.min_viaje - plan.min_total).abs().max())
     prueba("viaje + atención = total del día", e < 0.15, f"error máximo {e:.4f} min")
+
+    if matrices is None or "secuencia" not in plan.columns:
+        prueba("el viaje reportado es el de la secuencia publicada", False,
+               "no se recalculó: falta `matrices` o la columna `secuencia`", critico=False)
+    else:
+        peor, malos = 0.0, 0
+        for z, sec, viaje in zip(plan[col_zona], plan["secuencia"], plan["min_viaje"]):
+            sec = ast.literal_eval(sec) if isinstance(sec, str) else list(sec)
+            D = matrices[z]
+            real = float(sum(D[sec[k], sec[k + 1]] for k in range(len(sec) - 1)))
+            peor = max(peor, abs(real - float(viaje)))
+            malos += abs(real - float(viaje)) >= 0.15
+        prueba("el viaje reportado es el de la secuencia publicada", malos == 0,
+               f"{malos} días no cuadran · error máximo {peor:.2f} min" if malos
+               else f"error máximo {peor:.3f} min")
 
     nv = plan[plan.min_total > R.JORNADA_MAX]
     # Estos días NO son un defecto del cálculo: donde el territorio es delgado la

@@ -91,6 +91,16 @@ revisar("cada punto recibe sus visitas de la semana",
 revisar("ningún punto se visita dos veces el mismo día",
         all(len(f["secuencia"]) == len(set(f["secuencia"])) for f in filas))
 
+
+def largo_de(D, sec):
+    return float(sum(D[sec[k], sec[k + 1]] for k in range(len(sec) - 1)))
+
+
+# La secuencia publicada y sus minutos tienen que ser la MISMA ruta.
+revisar("el viaje de cada día es el de su secuencia (modo rápido)",
+        all(abs(largo_de(Dz, f["secuencia"]) - f["min_viaje"]) < 0.06 for f in filas),
+        f"error máximo {max(abs(largo_de(Dz, f['secuencia']) - f['min_viaje']) for f in filas):.2f} min")
+
 print("\n── GEOMETRÍA DEL MAPA ──────────────────────────────────────")
 import mapa as M   # noqa: E402
 poligonos, territorios = M.geometrias(df)
@@ -131,6 +141,23 @@ Pd = np.random.default_rng(11).uniform(0, 8, (25, 2))
 Dd = np.sqrt(((Pd[:, None] - Pd[None]) ** 2).sum(2))
 r1, r2 = PS.orden_optimo(Dd), PS.orden_optimo(Dd)
 revisar("el solver por defecto repite la misma ruta", r1 == r2, f"{r1[1]:.2f} vs {r2[1]:.2f}")
+
+# Sin OR-Tools el orden publicado era el de entrada y los minutos los del
+# heurístico: en el ejemplo, 10.737 min reportados frente a 24.398 reales.
+Pn = np.random.default_rng(5).uniform(0, 5, (14, 2))
+Dn = np.sqrt(((Pn[:, None] - Pn[None]) ** 2).sum(2))
+_ortools = {k: v for k, v in sys.modules.items() if k == "ortools" or k.startswith("ortools.")}
+for k in [*_ortools, "ortools", "ortools.constraint_solver"]:
+    sys.modules[k] = None                # cualquier `import ortools...` lanza ImportError
+try:
+    on, ln = PS.orden_optimo(Dn)
+finally:
+    for k in [k for k in sys.modules if k == "ortools" or k.startswith("ortools.")]:
+        del sys.modules[k]
+    sys.modules.update(_ortools)
+revisar("sin OR-Tools, la secuencia publicada y su viaje son la misma ruta",
+        sorted(on) == list(range(14)) and abs(largo_de(Dn, on) - ln) < 1e-9,
+        f"reportado {ln:.2f} · de la secuencia {largo_de(Dn, on):.2f}")
 
 revisar("el motor usa el mismo módulo de reglas que el usuario",
         Z.R is R and PS.R is R and qa.R is R)
@@ -194,6 +221,19 @@ zonas_df = df[en].groupby("zona").venta.sum().reset_index()
 with contextlib.redirect_stdout(io.StringIO()):
     ok_vacio = qa.verificar(df, zonas_df, sin_plan)
 revisar("el QA falla (sin romperse) si no hay plan semanal", ok_vacio is False)
+
+z0 = g.zona.iloc[0] if "zona" in g.columns else "Z"
+plan_z = pd.DataFrame([{**f, "zona": z0} for f in filas])
+zonas_z = pd.DataFrame({"zona": [z0], "venta": [g.venta.sum()]})
+with contextlib.redirect_stdout(io.StringIO()):
+    ok_bien = qa.verificar(g, zonas_z, plan_z, matrices={z0: Dz})
+    alterado = plan_z.copy()
+    largo_dia = alterado.secuencia.map(len).idxmax()
+    alterado.at[largo_dia, "secuencia"] = sorted(alterado.at[largo_dia, "secuencia"],
+                                                key=lambda i: Pn[i % 14, 0])
+    ok_mal = qa.verificar(g, zonas_z, alterado, matrices={z0: Dz})
+revisar("el QA recalcula el viaje: falla si la secuencia no es la de los minutos",
+        ok_bien is True and ok_mal is False, f"plan correcto {ok_bien} · alterado {ok_mal}")
 
 quincenal = df.assign(pdv_id=[f"P{i:03d}" for i in range(len(df))])
 quincenal.loc[quincenal.index[0], "frecuencia_semana"] = 0.5
