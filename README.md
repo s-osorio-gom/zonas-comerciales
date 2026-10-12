@@ -143,7 +143,9 @@ ok = qa.verificar(pdv, zonas, plan, matrices={"Z01": D})
 ```
 
 `zonificar_grupo` rechaza con `ValueError` una base con columnas faltantes,
-nulos, ventas o frecuencias negativas o coordenadas fuera de rango. Correr **un
+nulos, texto o booleanos donde van números, ventas o frecuencias negativas,
+coordenadas fuera de rango o un número de asesores que no sea entero; el mensaje
+dice qué columna revisar. Correr **un
 grupo a la vez** hace que "una zona no cruza grupos" se cumpla por construcción,
 en vez de tener que comprobarlo después. `ejemplo/demo.py` es la cadena completa
 como referencia, incluida la matriz de minutos en línea recta.

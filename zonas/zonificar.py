@@ -22,6 +22,7 @@ Entre dos soluciones parecidas gana la que deje MENOS VENTA residual, no la que
 deje menos puntos: sacrificar diez tiendas de $1 MM es mejor que una de $30 MM.
 """
 from pathlib import Path
+import numbers
 import sys
 
 import numpy as np
@@ -271,8 +272,18 @@ def _validar(df, lat, lon, venta, frecuencia):
     if faltan:
         raise ValueError(f"faltan columnas: {', '.join(faltan)}")
     for c in (lat, lon, venta, frecuencia):
+        s = df[c]
+        # Texto y booleanos se rechazan aunque NumPy sepa convertirlos: '5000000'
+        # suele venir de un CSV mal leído y True vale 1 peso sin que nadie lo note.
+        if s.dtype.kind == "b":
+            raise ValueError(f"'{c}' es booleana: se esperan números")
+        if s.dtype.kind not in "iuf":
+            raros = [v for v, nulo in zip(s, s.isna()) if not nulo and not _es_numero(v)]
+            if raros:
+                raise ValueError(f"'{c}' tiene {len(raros)} valores no numéricos "
+                                 f"(p. ej. {raros[0]!r}); convertir antes con pd.to_numeric")
         try:
-            x = np.asarray(df[c], dtype=float)
+            x = np.asarray(s, dtype=float)
         except (TypeError, ValueError):
             raise ValueError(f"'{c}' tiene valores no numéricos") from None
         malos = int((~np.isfinite(x)).sum())
@@ -282,6 +293,20 @@ def _validar(df, lat, lon, venta, frecuencia):
             raise ValueError(f"'{c}' tiene {int((x < 0).sum())} valores negativos")
     if ((df[lat].abs() > 90) | (df[lon].abs() > 180)).any():
         raise ValueError("coordenadas fuera de rango (|lat| ≤ 90, |lon| ≤ 180)")
+
+
+def _es_numero(v):
+    return isinstance(v, numbers.Real) and not isinstance(v, (bool, np.bool_))
+
+
+def _validar_asesores(asesores):
+    """None o un número entero. '3', True o 1,5 son casi siempre un error de
+    lectura, no una dotación: se rechazan en vez de truncarse en silencio."""
+    if asesores is None:
+        return None
+    if not _es_numero(asesores) or not float(asesores).is_integer():
+        raise ValueError(f"asesores debe ser un número entero o None (recibido {asesores!r})")
+    return int(asesores)
 
 
 def zonificar_grupo(df, asesores=None, lat="lat", lon="lon",
@@ -299,6 +324,7 @@ def zonificar_grupo(df, asesores=None, lat="lat", lon="lon",
     Devuelve (array de etiquetas -1..k-1, informe).
     """
     _validar(df, lat, lon, venta, frecuencia)
+    asesores = _validar_asesores(asesores)
     if len(df) == 0:
         return np.full(0, -1), dict(zonas=0, motivo="grupo sin puntos")
     if asesores is not None and asesores < 1:

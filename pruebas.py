@@ -285,6 +285,29 @@ try:
 except ValueError as e:
     msg = str(e)
 revisar("una venta no numérica se rechaza nombrando la columna", "'venta'" in msg, msg)
+
+
+def mensaje(fn):
+    try:
+        fn()
+    except ValueError as e:
+        return str(e)
+    except Exception as e:   # noqa: BLE001
+        return f"{type(e).__name__} (no ValueError): {e}"
+    return "aceptado"
+
+
+m_ases = mensaje(lambda: Z.zonificar_grupo(base(30), asesores="3"))
+m_txt = mensaje(lambda: Z.zonificar_grupo(base(30).assign(venta="5000000")))
+m_bool = mensaje(lambda: Z.zonificar_grupo(base(30).assign(venta=True)))
+m_frac = mensaje(lambda: Z.zonificar_grupo(base(30), asesores=1.5))
+revisar("tipos inválidos se rechazan con un mensaje claro",
+        m_ases.startswith("asesores debe") and "'venta' tiene 30 valores no numéricos" in m_txt
+        and "'venta' es booleana" in m_bool and m_frac.startswith("asesores debe"),
+        f"'3' → {m_ases[:40]} · texto → {m_txt[:40]} · bool → {m_bool[:30]} · 1,5 → {m_frac[:20]}")
+obj = base(30).assign(venta=lambda d: d.venta.astype(object))
+revisar("una columna de números en dtype object se acepta",
+        mensaje(lambda: Z.zonificar_grupo(obj)) == "aceptado")
 revisar("una columna faltante se rechaza con ValueError",
         lanza(lambda: Z.zonificar_grupo(base(30).drop(columns="frecuencia_semana"))))
 z0, inf0 = Z.zonificar_grupo(base(), asesores=0)
