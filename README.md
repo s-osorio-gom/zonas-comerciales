@@ -73,8 +73,10 @@ ve el motor entero.
 
 Requiere Python 3.12 o posterior con `venv` (probado con 3.12 y 3.14 en macOS;
 el CI usa 3.12 en Linux). Dependencias:
-NumPy, pandas, SciPy, Shapely, Folium y OR-Tools (este último opcional: sin él,
-las rutas finales caen al heurístico).
+NumPy, pandas, SciPy, Shapely, Folium y OR-Tools. OR-Tools es opcional: sin él,
+el orden de visita sale del heurístico (vecino más cercano + 2-opt) y el viaje
+publicado es el de ese orden. En el ejemplo eso da 10.737 min de viaje a la
+semana en vez de 9.865,6 (un 8,8 % más) y 10 días no viables en vez de 9.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -103,7 +105,7 @@ Salida real (extracto):
 ── PLAN SEMANAL ────────────────────────────────────────────
   115 días-zona en 23 zonas · VIABLE 104 · NO_VIABLE 9 · ALERTA 2
   ...
-  10 de 12 pruebas · 0 fallos críticos · 2 avisos
+  11 de 13 pruebas · 0 fallos críticos · 2 avisos
   ...
   MIN_POR_KM actual 6.59 → medido 11.43 · correlación 0.981 sobre 23 zonas
   ...
@@ -135,8 +137,9 @@ D = matriz_de_minutos(g)              # la tuya: OSRM, OSMnx o un servicio de ru
 filas = PS.plan_de_zona(P, g.venta.values, g.frecuencia_semana.values, D)
 
 # 3. QA: pdv con columna `zona` (nula si residual), zonas con `venta` agregada,
-#    plan con una fila por día-zona. Imprime el informe y devuelve bool.
-ok = qa.verificar(pdv, zonas, plan)
+#    plan con una fila por día-zona. Con `matrices` recalcula además el viaje
+#    de cada secuencia publicada. Imprime el informe y devuelve bool.
+ok = qa.verificar(pdv, zonas, plan, matrices={"Z01": D})
 ```
 
 `zonificar_grupo` rechaza con `ValueError` una base con columnas faltantes,
