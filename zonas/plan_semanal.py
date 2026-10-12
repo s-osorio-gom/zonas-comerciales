@@ -40,7 +40,8 @@ except ImportError:        # módulo copiado suelto a otro proyecto
 # El solver para por NÚMERO DE SOLUCIONES, no por reloj: con límite de tiempo el
 # plan dependía de cuánta CPU le tocara (tres corridas de la misma base daban
 # rutas distintas). TOPE_SEGUNDOS solo es la red de seguridad: el peor día del
-# ejemplo (31 paradas) se resuelve en ~2 s.
+# ejemplo (31 paradas) se resuelve en ~2 s. Si un día lo agota, ese día vuelve a
+# depender del reloj. Admite decimales.
 SOLUCIONES = 200
 TOPE_SEGUNDOS = 20
 
@@ -97,8 +98,10 @@ def orden_optimo(D, segundos=None):
     heurístico CON SU largo: secuencia y minutos siempre corresponden.
 
     Por defecto (`segundos=None`) la búsqueda local guiada para tras SOLUCIONES
-    soluciones: el mismo día da siempre la misma ruta, en cualquier máquina y
-    con cualquier carga. Medido sobre los 115 días de `ejemplo/`: con límite de
+    soluciones: con la misma versión de OR-Tools, el mismo día da la misma ruta
+    en cualquier máquina, mientras ningún día agote TOPE_SEGUNDOS (si lo
+    agota, manda el reloj y la ruta puede variar; en el ejemplo el peor día
+    tarda ~2 s de 20). Medido sobre los 115 días de `ejemplo/`: con límite de
     reloj por tamaño del día, 32,7 s y 9.848–9.866 min según la corrida; con 200
     soluciones, 25–31 s y 9.865,6 min en todas. Un presupuesto plano de 1 s
     por día costaba 113 s por la misma ruta.
@@ -130,7 +133,8 @@ def orden_optimo(D, segundos=None):
     par.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     if segundos is None:
         par.solution_limit = SOLUCIONES
-        par.time_limit.FromSeconds(TOPE_SEGUNDOS)
+        # FromSeconds solo acepta enteros: un tope de 2,5 s lanzaba TypeError
+        par.time_limit.FromMilliseconds(int(round(float(TOPE_SEGUNDOS) * 1000)))
     else:
         par.time_limit.FromMilliseconds(int(segundos * 1000))
     sol = rut.SolveWithParameters(par)

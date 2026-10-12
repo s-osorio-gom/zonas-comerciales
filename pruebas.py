@@ -182,7 +182,44 @@ revisar("el solver optimiza el camino abierto que se mide", not peores,
 Pd = np.random.default_rng(11).uniform(0, 8, (25, 2))
 Dd = np.sqrt(((Pd[:, None] - Pd[None]) ** 2).sum(2))
 r1, r2 = PS.orden_optimo(Dd), PS.orden_optimo(Dd)
-revisar("el solver por defecto repite la misma ruta", r1 == r2, f"{r1[1]:.2f} vs {r2[1]:.2f}")
+revisar("dos llamadas iguales al solver por defecto dan la misma ruta", r1 == r2,
+        f"{r1[1]:.2f} vs {r2[1]:.2f}")
+
+# Lo que de verdad decide la reproducibilidad: con qué criterio para el solver.
+try:
+    from ortools.constraint_solver import pywrapcp
+    _resolver = pywrapcp.RoutingModel.SolveWithParameters
+    criterios = []
+
+    def _espia(self, par, *a):
+        criterios.append((par.solution_limit,
+                          par.time_limit.seconds * 1000 + par.time_limit.nanos // 1_000_000))
+        return _resolver(self, par, *a)
+
+    pywrapcp.RoutingModel.SolveWithParameters = _espia
+    tope_antes = PS.TOPE_SEGUNDOS
+    try:
+        o_def, l_def = PS.orden_optimo(Dd)
+        o_seg, l_seg = PS.orden_optimo(Dd, segundos=0.2)
+        PS.TOPE_SEGUNDOS = 2.5
+        try:
+            o_dec, _ = PS.orden_optimo(Dd)
+            dec_ok = sorted(o_dec) == list(range(25))
+        except TypeError as e:
+            dec_ok = repr(e)
+    finally:
+        PS.TOPE_SEGUNDOS = tope_antes
+        pywrapcp.RoutingModel.SolveWithParameters = _resolver
+    revisar("por defecto el solver para por número de soluciones",
+            criterios[:1] == [(PS.SOLUCIONES, PS.TOPE_SEGUNDOS * 1000)], f"{criterios[:1]}")
+    revisar("con segundos= el solver para por reloj y la ruta es válida",
+            len(criterios) > 1 and criterios[1][1] == 200 and criterios[1][0] > 10**9
+            and sorted(o_seg) == list(range(25)) and abs(largo_de(Dd, o_seg) - l_seg) < 1e-9,
+            f"{criterios[1:2]} · {l_seg:.2f} min")
+    revisar("un tope del solver con decimales funciona", dec_ok is True and criterios[2:3] == [(PS.SOLUCIONES, 2500)],
+            "" if dec_ok is True else str(dec_ok))
+except ImportError:
+    print("  [—   ] sin OR-Tools: no se comprueba el criterio de parada del solver")
 
 # Sin OR-Tools el orden publicado era el de entrada y los minutos los del
 # heurístico: en el ejemplo, 10.737 min reportados frente a 24.398 reales.
